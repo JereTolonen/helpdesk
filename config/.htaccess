@@ -1,0 +1,4 @@
+# Ylimääräinen suoja Apache-palvelimille: estä suora pääsy config-kansion
+# tiedostoihin (esim. config.php), vaikka document root olisi vahingossa
+# osoitettu koko projektin juureen eikä pelkkään public-kansioon.
+Require all denied

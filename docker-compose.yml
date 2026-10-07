@@ -1,0 +1,110 @@
+# OpiskelijaHelpdesk – käynnistys yhdellä komennolla:
+#
+#   docker compose up -d --build
+#
+# Sovellus:  http://localhost:8080
+# Ensimmäisellä käynnistyksellä "ollama-pull" lataa mallin (gemma4:e2b, useita Gt).
+# Seuraa latausta: docker compose logs -f ollama-pull
+
+services:
+
+  # --- PHP-sovellus (Apache) ---------------------------------------
+  app:
+    build: .
+    container_name: helpdesk-app
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-8080}:80"
+    environment:
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_NAME: ${DB_NAME:-helpdesk}
+      DB_USER: ${DB_USER:-helpdesk}
+      DB_PASS: ${DB_PASS:-helpdesk}
+      OLLAMA_URL: ${OLLAMA_URL:-http://ollama:11434}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-gemma4:e2b}
+      OLLAMA_TIMEOUT: ${OLLAMA_TIMEOUT:-300}
+      OLLAMA_THINK: ${OLLAMA_THINK:-false}
+      CHAT_MIN_QUESTION_ROUNDS: ${CHAT_MIN_QUESTION_ROUNDS:-1}
+      CHAT_MAX_QUESTION_ROUNDS: ${CHAT_MAX_QUESTION_ROUNDS:-4}
+      APP_DEBUG: ${APP_DEBUG:-false}
+    # Kehitystä varten: poista kommentti, niin koodimuutokset näkyvät heti.
+    # volumes:
+    #   - ./:/var/www/html
+    extra_hosts:
+      # Mahdollistaa koneella jo pyörivän Ollaman käytön:
+      # OLLAMA_URL=http://host.docker.internal:11434
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      db:
+        condition: service_healthy
+      ollama:
+        condition: service_started
+
+  # --- Tietokanta ---------------------------------------------------
+  db:
+    image: mariadb:11
+    container_name: helpdesk-db
+    restart: unless-stopped
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    environment:
+      MARIADB_DATABASE: ${DB_NAME:-helpdesk}
+      MARIADB_USER: ${DB_USER:-helpdesk}
+      MARIADB_PASSWORD: ${DB_PASS:-helpdesk}
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASS:-rootsecret}
+      TZ: Europe/Helsinki
+    volumes:
+      - db_data:/var/lib/mysql
+      # Ajetaan automaattisesti vain, kun tietokanta luodaan ensimmäistä kertaa.
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # --- Paikallinen tekoälypalvelin ----------------------------------
+  ollama:
+    image: ollama/ollama:latest
+    container_name: helpdesk-ollama
+    restart: unless-stopped
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      OLLAMA_KEEP_ALIVE: 30m
+    # Poista kommentti, jos haluat käyttää Ollamaa myös koneelta (esim. curl):
+    # ports:
+    #   - "11434:11434"
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+  # --- Mallin lataus (ajetaan kerran ja sammuu) ---------------------
+  ollama-pull:
+    image: ollama/ollama:latest
+    container_name: helpdesk-ollama-pull
+    restart: "no"
+    environment:
+      OLLAMA_HOST: ollama:11434
+    entrypoint: ["/bin/sh", "-c", "ollama pull ${OLLAMA_MODEL:-gemma4:e2b} && echo 'Malli valmis.'"]
+    depends_on:
+      ollama:
+        condition: service_healthy
+
+  # --- Valinnainen: phpMyAdmin (docker compose --profile tools up -d) ---
+  phpmyadmin:
+    image: phpmyadmin:latest
+    container_name: helpdesk-phpmyadmin
+    profiles: ["tools"]
+    ports:
+      - "${PMA_PORT:-8081}:80"
+    environment:
+      PMA_HOST: db
+    depends_on:
+      - db
+
+volumes:
+  db_data:
+  ollama_data:

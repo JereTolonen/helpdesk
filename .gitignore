@@ -1,0 +1,6 @@
+.env
+config/config.php
+*.zip
+.DS_Store
+.idea/
+.vscode/

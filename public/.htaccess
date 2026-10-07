@@ -1,0 +1,15 @@
+# Ohjaa kaikki pyynnöt, jotka eivät osu olemassa olevaan tiedostoon,
+# front controllerille (index.php).
+Options -Indexes
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Välitä Authorization-otsake PHP:lle (REST API)
+    RewriteCond %{HTTP:Authorization} .
+    RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^ index.php [QSA,L]
+</IfModule>

@@ -1,0 +1,7 @@
+# Varmistus palvelimille, joissa document rootia ei voi osoittaa public-kansioon:
+# kaikki pyynnöt ohjataan public/-kansioon, eikä muita kansioita
+# (config, core, views, ...) voi avata selaimella.
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteRule ^(.*)$ public/$1 [L]
+</IfModule>
